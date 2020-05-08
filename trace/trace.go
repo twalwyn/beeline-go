@@ -10,6 +10,8 @@ import (
 	"github.com/honeycombio/beeline-go/propagation"
 	"github.com/honeycombio/beeline-go/sample"
 	libhoney "github.com/honeycombio/libhoney-go"
+
+	otel "go.opentelemetry.io/otel/api/trace"
 )
 
 var GlobalConfig Config
@@ -28,16 +30,7 @@ type Config struct {
 // is sent. You can send a trace manually, and that will cause all
 // synchronous  spans in the trace to be sent and sent. Asynchronous spans
 // must still be sent on their own
-type Trace struct {
-	builder          *libhoney.Builder
-	traceID          string
-	parentID         string
-	rollupFields     map[string]float64
-	rollupLock       sync.Mutex
-	rootSpan         *Span
-	tlfLock          sync.RWMutex
-	traceLevelFields map[string]interface{}
-}
+type Trace otel.Span
 
 // NewTrace creates a brand new trace. serializedHeaders is optional, and if
 // included, should be the header as written by trace.SerializeHeaders(). When
@@ -174,35 +167,7 @@ func (t *Trace) Send() {
 
 // Span represents a specific task or portion of an application. It has a time
 // and duration, and is linked to parent and children.
-type Span struct {
-	isAsync      bool
-	isSent       bool
-	isRoot       bool
-	children     []*Span
-	childrenLock sync.Mutex
-	ev           *libhoney.Event
-	spanID       string
-	parentID     string
-	parent       *Span
-	rollupFields map[string]float64
-	rollupLock   sync.Mutex
-	started      time.Time
-	trace        *Trace
-	eventLock    sync.Mutex
-	sendLock     sync.RWMutex
-}
-
-// newSpan takes care of *some* of the initialization necessary to create a new
-// span. IMPORTANT it is not all of the initialization! It does *not* set parent
-// ID or assign the pointer to the trace that contains this span. See existing
-// uses of this function to get an example of the other things necessary to
-// create a well formed span.
-func newSpan() *Span {
-	return &Span{
-		spanID:  uuid.Must(uuid.NewRandom()).String(),
-		started: time.Now(),
-	}
-}
+Span = otel.Span
 
 // AddField adds a key/value pair to this span
 func (s *Span) AddField(key string, val interface{}) {

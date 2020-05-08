@@ -3,11 +3,8 @@ package trace
 import (
 	"context"
 	"errors"
-)
 
-const (
-	honeySpanContextKey  = "honeycombSpanContextKey"
-	honeyTraceContextKey = "honeycombTraceContextKey"
+	otel "go.opentelemetry.org/otel/api/trace"
 )
 
 var (
@@ -17,14 +14,7 @@ var (
 // GetTraceFromContext retrieves a trace from the passed in context or returns
 // nil if no trace exists.
 func GetTraceFromContext(ctx context.Context) *Trace {
-	if ctx != nil {
-		if val := ctx.Value(honeyTraceContextKey); val != nil {
-			if trace, ok := val.(*Trace); ok {
-				return trace
-			}
-		}
-	}
-	return nil
+	return otel.SpanFromContext(ctx)
 }
 
 // PutTraceInContext takes an existing context and a trace and pushes the trace
@@ -39,22 +29,13 @@ func PutTraceInContext(ctx context.Context, trace *Trace) context.Context {
 // or from the context directly. It will return nil if there is no span
 // available.
 func GetSpanFromContext(ctx context.Context) *Span {
-	if ctx != nil {
-		if val := ctx.Value(honeySpanContextKey); val != nil {
-			if span, ok := val.(*Span); ok {
-				return span
-			}
-		}
-	}
-	return nil
+	return &otel.SpanFromContext(ctx)
 }
 
 // PutSpanInContext takes an existing context and a span and pushes the span
 // into the context.  It will replace any spans that already exist in the
 // context. Spans put in context are retrieved using GetSpanFromContext.
-func PutSpanInContext(ctx context.Context, span *Span) context.Context {
-	return context.WithValue(ctx, honeySpanContextKey, span)
-}
+PutSpanInContext = otel.ContextWithSpan
 
 // CopyContext takes a context that has a beeline trace and one that doesn't. It
 // copies all the bits necessary to continue the trace from one to the other.
