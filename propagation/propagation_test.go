@@ -120,7 +120,7 @@ func TestMarshalAmazonTraceContext(t *testing.T) {
 	// It's covered by the roundtrip test below.
 	assert.Equal(t, "Root=abcdef123456;Parent=0102030405", header[0:35])
 
-	returned, err := UnmarshalAmazonTraceContext(header)
+	returned, err := UnmarshalAmazonTraceContext(header, false)
 	if assert.NoError(t, err) {
 		assert.Equal(t, prop, returned, "roundtrip object")
 	}
@@ -260,12 +260,14 @@ func TestUnmarshalAmazonTraceContext(t *testing.T) {
 		contextStr string
 		prop       *PropagationContext
 		returnsErr bool
+		useSelf    bool
 	}{
 		{
 			"empty header - throw an error since it contains neither a trace id nor parent id",
 			"",
 			nil,
 			true,
+			false,
 		},
 		{
 			"all fields legit",
@@ -276,6 +278,7 @@ func TestUnmarshalAmazonTraceContext(t *testing.T) {
 				TraceContext: make(map[string]interface{}),
 			},
 			false,
+			true,
 		},
 		{
 			"all fields legit with some context",
@@ -290,16 +293,20 @@ func TestUnmarshalAmazonTraceContext(t *testing.T) {
 				},
 			},
 			false,
+			true,
 		},
 		{
-			"self, parent and root fields. parent should end up dropped",
+			"self, parent and root fields. parent should be propagated in the trace context",
 			"Root=foo;Self=baz;Parent=bar",
 			&PropagationContext{
 				TraceID:  "foo",
 				ParentID: "baz",
-				TraceContext: map[string]interface{}{},
+				TraceContext: map[string]interface{}{
+					"Parent": "bar",
+				},
 			},
 			false,
+			true,
 		},
 		{
 			"Missing trace id, should inherit parent id",
@@ -312,17 +319,19 @@ func TestUnmarshalAmazonTraceContext(t *testing.T) {
 				},
 			},
 			false,
+			true,
 		},
 		{
 			"Missing trace id and parent id is populated, error",
 			"Foo=bar;Self=foobar;Bar=baz",
 			nil,
 			true,
+			true,
 		},
 	}
 
 	for _, tt := range testCases {
-		prop, err := UnmarshalAmazonTraceContext(tt.contextStr)
+		prop, err := UnmarshalAmazonTraceContext(tt.contextStr, tt.useSelf)
 		assert.Equal(t, tt.prop, prop, tt.name)
 		if tt.returnsErr {
 			assert.Error(t, err, tt.name)

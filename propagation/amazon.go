@@ -40,7 +40,9 @@ func MarshalAmazonTraceContext(prop *PropagationContext) string {
 
 // UnmarshalAmazonTraceContext parses the information provided in the headers and creates
 // a PropagationContext instance. The provided headers is expected to contain an X-Amzn-Trace-Id
-// key which will contain the value of the Amazon header.
+// key which will contain the value of the Amazon header. The useSelfAsParent paramater allows
+// callers to specify that they would like to use the Self segment of the header (set by load balancers)
+// as the source for the parent ID. If it is false, Parent will be used instead.
 //
 // According to the documentation for load balancer request tracing:
 // https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-request-tracing.html
@@ -51,7 +53,7 @@ func MarshalAmazonTraceContext(prop *PropagationContext) string {
 // fields are stored as a base64 encoded JSON object and unmarshaled into ints, bools, etc.
 //
 // If the header cannot be used to construct a valid PropagationContext, an error will be returned.
-func UnmarshalAmazonTraceContext(header string) (*PropagationContext, error) {
+func UnmarshalAmazonTraceContext(header string, useSelfAsParent bool) (*PropagationContext, error) {
 	segments := strings.Split(header, ";")
 	// From https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-request-tracing.html
 	// If the X-Amzn-Trace-Id header is not present on an incoming request, the load balancer generates a header
@@ -65,28 +67,31 @@ func UnmarshalAmazonTraceContext(header string) (*PropagationContext, error) {
 	// and root as the trace id.
 	prop := &PropagationContext{}
 	prop.TraceContext = make(map[string]interface{})
-	var parent string
+
+	// If a request goes through an amazon load balancer, and the user has an agent like honeyalb sending load
+	// balancer logs to Honeycomb, they'll want to set useSelfAsParent to true. This will cause the beeline to
+	// look at the Self segment in the header, set by the load balancer, and use the value as the parent ID of
+	// the current span.
+	var parentField string
+	if useSelfAsParent {
+		parentField = "self"
+	} else {
+		parentField = "parent"
+	}
+
 	for _, segment := range segments {
 		keyval := strings.SplitN(segment, "=", 2)
 		if len(keyval) < 2 {
 			continue
 		}
 		switch strings.ToLower(keyval[0]) {
-		case "self":
+		case parentField:
 			prop.ParentID = keyval[1]
 		case "root":
 			prop.TraceID = keyval[1]
-		case "parent":
-			parent = keyval[1]
 		default:
 			prop.TraceContext[keyval[0]] = keyval[1]
 		}
-	}
-
-	// Our primary use case is to support load balancers, so favor self over parent.
-	// If, however, a parent is present and self is not, use it.
-	if prop.ParentID == "" && parent != "" {
-		prop.ParentID = parent
 	}
 
 	// If no header is provided to an ALB or ELB, it will generate a header
