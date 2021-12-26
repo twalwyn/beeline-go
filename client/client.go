@@ -50,7 +50,7 @@ func NewBuilder() *libhoney.Builder {
 
 func TxResponses() chan transmission.Response {
 	if client != nil {
-		client.TxResponses()
+		return client.TxResponses()
 	}
 
 	c := make(chan transmission.Response)
